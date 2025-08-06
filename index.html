@@ -7,11 +7,16 @@
     <script src="https://cdn.tailwindcss.com"></script>
     
     <!-- Firebase SDK -->
+    <script src="https://www.gstatic.com/firebasejs/12.0.0/firebase-app.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/12.0.0/firebase-auth.js"></script>
+    <!-- Firebase Firestore -->
+    <script src="https://www.gstatic.com/firebasejs/12.0.0/firebase-firestore.js"></script>
+    
     <script type="module">
         // Import the functions you need from the SDKs you need
         import { initializeApp } from "https://www.gstatic.com/firebasejs/12.0.0/firebase-app.js";
         import { getAuth, GoogleAuthProvider, signInWithPopup, signOut, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/12.0.0/firebase-auth.js";
-        import { getFirestore, doc, setDoc, getDoc, collection, query, where, getDocs } from "https://www.gstatic.com/firebasejs/12.0.0/firebase-firestore.js";
+        import { getFirestore, doc, setDoc, getDoc, collection, query, where, getDocs, onSnapshot, addDoc } from "https://www.gstatic.com/firebasejs/12.0.0/firebase-firestore.js";
         import { getAnalytics } from "https://www.gstatic.com/firebasejs/12.0.0/firebase-analytics.js";
 
         // Your web app's Firebase configuration
@@ -31,6 +36,15 @@
         const db = getFirestore(app);
         const analytics = getAnalytics(app);
         const provider = new GoogleAuthProvider();
+    </script>
+    
+    <script>
+        // Inicializa o Firestore
+        const db = firebase.firestore();
+    </script>
+    
+    <script type="module">
+        // Continue with Firebase setup
 
         // Make Firebase services available globally
         window.firebaseAuth = auth;
@@ -46,6 +60,8 @@
         window.firestoreQuery = query;
         window.firestoreWhere = where;
         window.firestoreGetDocs = getDocs;
+        window.firestoreOnSnapshot = onSnapshot;
+        window.firestoreAddDoc = addDoc;
     </script>
     <style>
         .blur-background {
@@ -420,6 +436,9 @@
                 // Load user notes from Firestore
                 await loadUserNotesFromFirestore();
                 
+                // Setup real-time sync
+                setupRealtimeSync();
+                
                 showMainContent();
                 
                 setTimeout(() => {
@@ -480,6 +499,63 @@
             }
         }
         
+        // Função para sincronizar eventos em tempo real
+        function setupRealtimeSync() {
+            if (!firebaseUser) return;
+            
+            const uid = firebaseUser.uid;
+            const eventsRef = window.firestoreCollection(window.firebaseDb, 'users', uid, 'events');
+            
+            // Listener em tempo real para eventos
+            window.firestoreOnSnapshot(eventsRef, (snapshot) => {
+                const eventos = snapshot.docs.map(doc => ({
+                    id: doc.id,
+                    ...doc.data()
+                }));
+                
+                console.log('🔄 Eventos sincronizados em tempo real:', eventos.length, 'eventos');
+                
+                // Atualizar userNotes com os eventos sincronizados
+                eventos.forEach(evento => {
+                    if (evento.date && evento.note) {
+                        userNotes[evento.date] = evento.note;
+                    }
+                });
+                
+                // Atualizar a UI do calendário
+                generateCalendar();
+                updateStorageStatus('🌐 Sincronizado em tempo real');
+                
+            }, (error) => {
+                console.error('❌ Erro no listener de tempo real:', error);
+                updateStorageStatus('⚠️ Erro na sincronização em tempo real');
+            });
+        }
+        
+        // Função para salvar evento no Firestore
+        async function saveEventToFirestore(date, note) {
+            if (!firebaseUser) return false;
+            
+            try {
+                const uid = firebaseUser.uid;
+                const eventsRef = window.firestoreCollection(window.firebaseDb, 'users', uid, 'events');
+                
+                await window.firestoreAddDoc(eventsRef, {
+                    title: 'Observação do Calendário',
+                    date: date,
+                    note: note,
+                    timestamp: new Date().toISOString(),
+                    device: getDeviceInfo().type
+                });
+                
+                console.log('✅ Evento salvo no Firestore:', date);
+                return true;
+            } catch (error) {
+                console.error('❌ Erro ao salvar evento no Firestore:', error);
+                return false;
+            }
+        }
+        
         async function saveNotesToFirestore(notes) {
             if (!firebaseUser) return false;
             
@@ -509,6 +585,9 @@
                     
                     // Load user notes
                     await loadUserNotesFromFirestore();
+                    
+                    // Setup real-time sync
+                    setupRealtimeSync();
                     
                     // Show main content if not already shown
                     if (document.getElementById('loginModal').style.display !== 'none') {
@@ -816,6 +895,25 @@
             } catch (error) {
                 console.error('❌ Erro ao salvar observações:', error);
                 alert('Erro ao salvar observação.');
+                return false;
+            }
+        }
+        
+        // Função para salvar uma nota individual no Firestore
+        async function saveIndividualNote(date, note) {
+            if (!firebaseUser) return false;
+            
+            try {
+                // Salvar como evento individual no Firestore
+                const saved = await saveEventToFirestore(date, note);
+                
+                if (saved) {
+                    console.log('✅ Nota individual salva no Firestore:', date);
+                    return true;
+                }
+                return false;
+            } catch (error) {
+                console.error('❌ Erro ao salvar nota individual:', error);
                 return false;
             }
         }
@@ -1183,7 +1281,7 @@
             }, 300);
         }
 
-        function saveNote() {
+        async function saveNote() {
             const noteInput = document.getElementById('noteInput');
             const noteText = noteInput.value.trim();
             
@@ -1199,17 +1297,24 @@
                 userNotes[currentNoteDate] = noteText;
                 const localSaved = saveNotes(userNotes);
                 
+                // Also save individual note to Firestore for real-time sync
+                let firebaseSaved = false;
+                if (firebaseUser) {
+                    firebaseSaved = await saveIndividualNote(currentNoteDate, noteText);
+                }
+                
                 if (localSaved) {
                     // Show success
                     saveBtn.innerHTML = '✅ Salvo!';
                     saveBtn.classList.add('bg-green-500', 'hover:bg-green-600');
                     saveBtn.classList.remove('bg-yellow-500', 'hover:bg-yellow-600');
                     
-                    console.log('✅ Observação salva:', currentNoteDate, '- Conteúdo:', noteText);
+                    const syncStatus = firebaseSaved ? 'e sincronizado' : '';
+                    console.log(`✅ Observação salva ${syncStatus}:`, currentNoteDate, '- Conteúdo:', noteText);
                     
                     setTimeout(() => {
                         generateCalendar();
-                        updateStorageStatus();
+                        updateStorageStatus(firebaseSaved ? '🌐 Salvo e sincronizado em tempo real' : '💾 Salvo localmente');
                         checkDailyNotifications();
                         closeNotesModal();
                         
@@ -1612,5 +1717,5 @@
             }
         });
     </script>
-<script>(function(){function c(){var b=a.contentDocument||a.contentWindow.document;if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'96ae7c596335a17b',t:'MTc1NDQ4Mjc5OS4wMDAwMDA='};var a=document.createElement('script');a.nonce='';a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script></body>
+<script>(function(){function c(){var b=a.contentDocument||a.contentWindow.document;if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'96aec75de3ed79d1',t:'MTc1NDQ4NTg3Mi4wMDAwMDA='};var a=document.createElement('script');a.nonce='';a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script></body>
 </html>
