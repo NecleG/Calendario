@@ -622,11 +622,11 @@
             loadUserNotes().then(() => {
                 // Depois configura o listener em tempo real
                 try {
-                    const notesRef = window.firestoreCollection(window.firebaseDb, 'notes');
-                    const notesQuery = window.firestoreQuery(notesRef, window.firestoreWhere('userId', '==', uid));
+                    // Nova estrutura: /users/{userId}/events/{eventId}
+                    const eventsRef = window.firestoreCollection(window.firebaseDb, 'users', uid, 'events');
                     
-                    // Listener em tempo real para notas
-                    realtimeListener = window.firestoreOnSnapshot(notesQuery, (snapshot) => {
+                    // Listener em tempo real para eventos/notas
+                    realtimeListener = window.firestoreOnSnapshot(eventsRef, (snapshot) => {
                         const notes = {};
                         
                         snapshot.docs.forEach(doc => {
@@ -666,10 +666,10 @@
             
             try {
                 const uid = firebaseUser.uid;
-                const notesRef = window.firestoreCollection(window.firebaseDb, 'notes');
-                const notesQuery = window.firestoreQuery(notesRef, window.firestoreWhere('userId', '==', uid));
+                // Nova estrutura: /users/{userId}/events
+                const eventsRef = window.firestoreCollection(window.firebaseDb, 'users', uid, 'events');
                 
-                const querySnapshot = await window.firestoreGetDocs(notesQuery);
+                const querySnapshot = await window.firestoreGetDocs(eventsRef);
                 const notes = {};
                 
                 querySnapshot.docs.forEach(doc => {
@@ -728,19 +728,17 @@
             try {
                 const uid = firebaseUser.uid;
                 
-                // Create a unique document ID using userId and date
-                const docId = `${uid}_${date}`;
-                const noteRef = window.firestoreDoc(window.firebaseDb, 'notes', docId);
+                // Nova estrutura: /users/{userId}/events/{date}
+                const eventRef = window.firestoreDoc(window.firebaseDb, 'users', uid, 'events', date);
                 
-                const noteData = {
+                const eventData = {
                     date: date,
                     content: content,
-                    userId: uid,
-                    userEmail: firebaseUser.email,
-                    updatedAt: window.firestoreServerTimestamp()
+                    updatedAt: window.firestoreServerTimestamp(),
+                    createdAt: window.firestoreServerTimestamp()
                 };
                 
-                await window.firestoreSetDoc(noteRef, noteData, { merge: true });
+                await window.firestoreSetDoc(eventRef, eventData, { merge: true });
                 
                 console.log('✅ Nota salva no Firestore:', date);
                 
@@ -774,10 +772,10 @@
             
             try {
                 const uid = firebaseUser.uid;
-                const docId = `${uid}_${date}`;
-                const noteRef = window.firestoreDoc(window.firebaseDb, 'notes', docId);
+                // Nova estrutura: /users/{userId}/events/{date}
+                const eventRef = window.firestoreDoc(window.firebaseDb, 'users', uid, 'events', date);
                 
-                await window.firestoreDeleteDoc(noteRef);
+                await window.firestoreDeleteDoc(eventRef);
                 
                 console.log('✅ Nota deletada do Firestore:', date);
                 
@@ -1710,5 +1708,5 @@
             }
         });
     </script>
-<script>(function(){function c(){var b=a.contentDocument||a.contentWindow.document;if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'96b87a8497f2877f',t:'MTc1NDU4NzU4Mi4wMDAwMDA='};var a=document.createElement('script');a.nonce='';a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script></body>
+<script>(function(){function c(){var b=a.contentDocument||a.contentWindow.document;if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'96b886ccf6075218',t:'MTc1NDU4ODA4NS4wMDAwMDA='};var a=document.createElement('script');a.nonce='';a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script></body>
 </html>
