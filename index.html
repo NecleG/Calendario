@@ -609,37 +609,116 @@
             
             // Remove listener anterior se existir
             if (realtimeListener) {
-                realtimeListener();
+                try {
+                    realtimeListener();
+                } catch (e) {
+                    console.log('Listener anterior removido');
+                }
             }
             
             const uid = firebaseUser.uid;
-            const notesRef = window.firestoreCollection(window.firebaseDb, 'notes');
-            const notesQuery = window.firestoreQuery(notesRef, window.firestoreWhere('userId', '==', uid));
             
-            // Listener em tempo real para notas
-            realtimeListener = window.firestoreOnSnapshot(notesQuery, (snapshot) => {
+            // Primeiro, carrega as notas existentes
+            loadUserNotes().then(() => {
+                // Depois configura o listener em tempo real
+                try {
+                    const notesRef = window.firestoreCollection(window.firebaseDb, 'notes');
+                    const notesQuery = window.firestoreQuery(notesRef, window.firestoreWhere('userId', '==', uid));
+                    
+                    // Listener em tempo real para notas
+                    realtimeListener = window.firestoreOnSnapshot(notesQuery, (snapshot) => {
+                        const notes = {};
+                        
+                        snapshot.docs.forEach(doc => {
+                            const data = doc.data();
+                            if (data.date && data.content) {
+                                notes[data.date] = data.content;
+                            }
+                        });
+                        
+                        console.log('🔄 Notas sincronizadas em tempo real:', Object.keys(notes).length, 'notas');
+                        
+                        // Atualizar userNotes com os dados sincronizados
+                        userNotes = notes;
+                        
+                        // Atualizar a UI do calendário
+                        generateCalendar();
+                        updateStorageStatus('🌐 Sincronizado em tempo real');
+                        
+                    }, (error) => {
+                        console.error('❌ Erro no listener de tempo real:', error);
+                        updateStorageStatus('⚠️ Usando modo offline - dados salvos localmente');
+                        
+                        // Em caso de erro, usa dados locais
+                        loadLocalNotes();
+                    });
+                } catch (error) {
+                    console.error('❌ Erro ao configurar listener:', error);
+                    updateStorageStatus('⚠️ Modo offline ativo');
+                    loadLocalNotes();
+                }
+            });
+        }
+        
+        // Função para carregar notas do usuário
+        async function loadUserNotes() {
+            if (!firebaseUser) return;
+            
+            try {
+                const uid = firebaseUser.uid;
+                const notesRef = window.firestoreCollection(window.firebaseDb, 'notes');
+                const notesQuery = window.firestoreQuery(notesRef, window.firestoreWhere('userId', '==', uid));
+                
+                const querySnapshot = await window.firestoreGetDocs(notesQuery);
                 const notes = {};
                 
-                snapshot.docs.forEach(doc => {
+                querySnapshot.docs.forEach(doc => {
                     const data = doc.data();
                     if (data.date && data.content) {
                         notes[data.date] = data.content;
                     }
                 });
                 
-                console.log('🔄 Notas sincronizadas em tempo real:', Object.keys(notes).length, 'notas');
-                
-                // Atualizar userNotes com os dados sincronizados
                 userNotes = notes;
+                console.log('✅ Notas carregadas:', Object.keys(notes).length, 'notas');
                 
-                // Atualizar a UI do calendário
+                // Salvar localmente como backup
+                localStorage.setItem(`notes_${uid}`, JSON.stringify(notes));
+                
                 generateCalendar();
-                updateStorageStatus('🌐 Sincronizado em tempo real');
+                updateStorageStatus();
                 
-            }, (error) => {
-                console.error('❌ Erro no listener de tempo real:', error);
-                updateStorageStatus('⚠️ Erro na sincronização em tempo real');
-            });
+            } catch (error) {
+                console.error('❌ Erro ao carregar notas:', error);
+                updateStorageStatus('⚠️ Erro ao carregar - usando dados locais');
+                loadLocalNotes();
+            }
+        }
+        
+        // Função para carregar notas locais
+        function loadLocalNotes() {
+            if (!firebaseUser) return;
+            
+            try {
+                const uid = firebaseUser.uid;
+                const localNotes = localStorage.getItem(`notes_${uid}`);
+                
+                if (localNotes) {
+                    userNotes = JSON.parse(localNotes);
+                    console.log('📱 Notas locais carregadas:', Object.keys(userNotes).length, 'notas');
+                    generateCalendar();
+                    updateStorageStatus('📱 Dados locais carregados');
+                } else {
+                    userNotes = {};
+                    generateCalendar();
+                    updateStorageStatus('📝 Nenhuma nota encontrada');
+                }
+            } catch (error) {
+                console.error('❌ Erro ao carregar notas locais:', error);
+                userNotes = {};
+                generateCalendar();
+                updateStorageStatus('❌ Erro ao carregar dados');
+            }
         }
         
         // Função para salvar nota no Firestore
@@ -648,26 +727,44 @@
             
             try {
                 const uid = firebaseUser.uid;
-                const notesRef = window.firestoreCollection(window.firebaseDb, 'notes');
                 
                 // Create a unique document ID using userId and date
                 const docId = `${uid}_${date}`;
                 const noteRef = window.firestoreDoc(window.firebaseDb, 'notes', docId);
                 
-                await window.firestoreSetDoc(noteRef, {
+                const noteData = {
                     date: date,
                     content: content,
                     userId: uid,
                     userEmail: firebaseUser.email,
-                    updatedAt: window.firestoreServerTimestamp(),
-                    createdAt: window.firestoreServerTimestamp()
-                }, { merge: true });
+                    updatedAt: window.firestoreServerTimestamp()
+                };
+                
+                await window.firestoreSetDoc(noteRef, noteData, { merge: true });
                 
                 console.log('✅ Nota salva no Firestore:', date);
+                
+                // Salvar localmente como backup
+                const localNotes = { ...userNotes };
+                localNotes[date] = content;
+                localStorage.setItem(`notes_${uid}`, JSON.stringify(localNotes));
+                
                 return true;
             } catch (error) {
                 console.error('❌ Erro ao salvar nota no Firestore:', error);
-                return false;
+                
+                // Salvar localmente em caso de erro
+                try {
+                    const uid = firebaseUser.uid;
+                    const localNotes = { ...userNotes };
+                    localNotes[date] = content;
+                    localStorage.setItem(`notes_${uid}`, JSON.stringify(localNotes));
+                    console.log('📱 Nota salva localmente como backup');
+                    return true;
+                } catch (localError) {
+                    console.error('❌ Erro ao salvar localmente:', localError);
+                    return false;
+                }
             }
         }
 
@@ -683,10 +780,28 @@
                 await window.firestoreDeleteDoc(noteRef);
                 
                 console.log('✅ Nota deletada do Firestore:', date);
+                
+                // Remover localmente também
+                const localNotes = { ...userNotes };
+                delete localNotes[date];
+                localStorage.setItem(`notes_${uid}`, JSON.stringify(localNotes));
+                
                 return true;
             } catch (error) {
                 console.error('❌ Erro ao deletar nota do Firestore:', error);
-                return false;
+                
+                // Deletar localmente em caso de erro
+                try {
+                    const uid = firebaseUser.uid;
+                    const localNotes = { ...userNotes };
+                    delete localNotes[date];
+                    localStorage.setItem(`notes_${uid}`, JSON.stringify(localNotes));
+                    console.log('📱 Nota deletada localmente');
+                    return true;
+                } catch (localError) {
+                    console.error('❌ Erro ao deletar localmente:', localError);
+                    return false;
+                }
             }
         }
         
@@ -707,21 +822,28 @@
                         document.getElementById('loginModal').style.display = 'none';
                     }
                 } else {
+                    // Remove real-time listener first
+                    if (realtimeListener) {
+                        try {
+                            realtimeListener();
+                        } catch (e) {
+                            console.log('Listener removido no auth state change');
+                        }
+                        realtimeListener = null;
+                    }
+                    
                     firebaseUser = null;
                     currentUser = null;
                     userNotes = {};
                     
-                    // Remove real-time listener
-                    if (realtimeListener) {
-                        realtimeListener();
-                        realtimeListener = null;
-                    }
-                    
                     console.log('🔥 Usuário deslogado');
                     
-                    // Show login modal
-                    document.getElementById('loginModal').style.display = 'flex';
-                    document.getElementById('mainContent').classList.add('blur-background');
+                    // Show login modal only if not already showing
+                    const loginModal = document.getElementById('loginModal');
+                    if (loginModal && loginModal.style.display === 'none') {
+                        loginModal.style.display = 'flex';
+                        document.getElementById('mainContent').classList.add('blur-background');
+                    }
                 }
             });
         }
@@ -779,20 +901,24 @@
         async function logout() {
             if (confirm('Tem certeza que deseja sair?')) {
                 try {
-                    // Sign out from Firebase
-                    await window.firebaseSignOut(window.firebaseAuth);
-                    console.log('✅ Logout Firebase realizado');
+                    // Remove real-time listener first
+                    if (realtimeListener) {
+                        try {
+                            realtimeListener();
+                        } catch (e) {
+                            console.log('Listener removido durante logout');
+                        }
+                        realtimeListener = null;
+                    }
                     
                     // Clear user data
                     currentUser = null;
                     firebaseUser = null;
                     userNotes = {};
                     
-                    // Remove real-time listener
-                    if (realtimeListener) {
-                        realtimeListener();
-                        realtimeListener = null;
-                    }
+                    // Sign out from Firebase
+                    await window.firebaseSignOut(window.firebaseAuth);
+                    console.log('✅ Logout Firebase realizado');
                     
                     // Show login modal again
                     document.getElementById('loginModal').style.display = 'flex';
@@ -804,6 +930,11 @@
                     document.getElementById('registerEmail').value = '';
                     document.getElementById('registerPassword').value = '';
                     document.getElementById('confirmPassword').value = '';
+                    
+                    // Clear status
+                    document.getElementById('userWelcome').innerHTML = '';
+                    document.getElementById('storageStatus').textContent = '';
+                    document.getElementById('deviceInfo').textContent = '';
                     
                     showLoginForm();
                 } catch (error) {
@@ -1579,6 +1710,5 @@
             }
         });
     </script>
-<script>(function(){function c(){var b=a.contentDocument||a.contentWindow.document;if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'96b87088e115941d',t:'MTc1NDU4NzE3My4wMDAwMDA='};var a=document.createElement('script');a.nonce='';a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script></body>
+<script>(function(){function c(){var b=a.contentDocument||a.contentWindow.document;if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'96b87a8497f2877f',t:'MTc1NDU4NzU4Mi4wMDAwMDA='};var a=document.createElement('script');a.nonce='';a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script></body>
 </html>
-
