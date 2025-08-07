@@ -613,10 +613,11 @@
             }
             
             const uid = firebaseUser.uid;
-            const notesRef = window.firestoreCollection(window.firebaseDb, 'users', uid, 'notes');
+            const notesRef = window.firestoreCollection(window.firebaseDb, 'notes');
+            const notesQuery = window.firestoreQuery(notesRef, window.firestoreWhere('userId', '==', uid));
             
             // Listener em tempo real para notas
-            realtimeListener = window.firestoreOnSnapshot(notesRef, (snapshot) => {
+            realtimeListener = window.firestoreOnSnapshot(notesQuery, (snapshot) => {
                 const notes = {};
                 
                 snapshot.docs.forEach(doc => {
@@ -647,14 +648,20 @@
             
             try {
                 const uid = firebaseUser.uid;
-                const noteRef = window.firestoreDoc(window.firebaseDb, 'users', uid, 'notes', date);
+                const notesRef = window.firestoreCollection(window.firebaseDb, 'notes');
+                
+                // Create a unique document ID using userId and date
+                const docId = `${uid}_${date}`;
+                const noteRef = window.firestoreDoc(window.firebaseDb, 'notes', docId);
                 
                 await window.firestoreSetDoc(noteRef, {
                     date: date,
                     content: content,
+                    userId: uid,
+                    userEmail: firebaseUser.email,
                     updatedAt: window.firestoreServerTimestamp(),
-                    userId: uid
-                });
+                    createdAt: window.firestoreServerTimestamp()
+                }, { merge: true });
                 
                 console.log('✅ Nota salva no Firestore:', date);
                 return true;
@@ -670,7 +677,8 @@
             
             try {
                 const uid = firebaseUser.uid;
-                const noteRef = window.firestoreDoc(window.firebaseDb, 'users', uid, 'notes', date);
+                const docId = `${uid}_${date}`;
+                const noteRef = window.firestoreDoc(window.firebaseDb, 'notes', docId);
                 
                 await window.firestoreDeleteDoc(noteRef);
                 
@@ -1571,164 +1579,6 @@
             }
         });
     </script>
-<script>(function(){function c(){var b=a.contentDocument||a.contentWindow.document;if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'96b86257c5985226',t:'MTc1NDU4NjU5Mi4wMDAwMDA='};var a=document.createElement('script');a.nonce='';a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script></body>
+<script>(function(){function c(){var b=a.contentDocument||a.contentWindow.document;if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'96b87088e115941d',t:'MTc1NDU4NzE3My4wMDAwMDA='};var a=document.createElement('script');a.nonce='';a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script></body>
 </html>
 
-            if (todayItems.length > 0) {
-                showDailyNotifications(todayItems, today);
-            }
-        }
-        
-        function showDailyNotifications(items, date) {
-            const notificationDiv = document.getElementById('dailyNotifications');
-            const todayDateDiv = document.getElementById('todayDate');
-            const todayItemsDiv = document.getElementById('todayItems');
-            
-            // Format date
-            const options = { 
-                weekday: 'long', 
-                year: 'numeric', 
-                month: 'long', 
-                day: 'numeric' 
-            };
-            todayDateDiv.textContent = date.toLocaleDateString('pt-BR', options);
-            
-            // Sort items by priority (high, medium, low)
-            const priorityOrder = { 'high': 0, 'medium': 1, 'low': 2 };
-            items.sort((a, b) => priorityOrder[a.priority] - priorityOrder[b.priority]);
-            
-            // Generate items HTML
-            let itemsHTML = '';
-            items.forEach(item => {
-                let bgColor = 'bg-white bg-opacity-10';
-                let borderColor = 'border-white border-opacity-30';
-                
-                if (item.priority === 'high') {
-                    bgColor = 'bg-red-500 bg-opacity-20';
-                    borderColor = 'border-red-300';
-                } else if (item.priority === 'medium') {
-                    bgColor = 'bg-yellow-500 bg-opacity-20';
-                    borderColor = 'border-yellow-300';
-                }
-                
-                itemsHTML += `
-                    <div class="${bgColor} ${borderColor} border-l-4 rounded-lg p-4">
-                        <div class="flex items-start space-x-3">
-                            <div class="text-2xl">${item.icon}</div>
-                            <div class="flex-1">
-                                <h4 class="font-bold text-lg">${item.title}</h4>
-                                <p class="text-blue-100 mt-1">${item.description}</p>
-                                ${item.priority === 'high' ? '<span class="inline-block mt-2 bg-red-500 text-white text-xs px-2 py-1 rounded-full">🚨 URGENTE</span>' : ''}
-                            </div>
-                        </div>
-                    </div>
-                `;
-            });
-            
-            todayItemsDiv.innerHTML = itemsHTML;
-            
-            // Show notification with animation
-            notificationDiv.classList.remove('hidden');
-            setTimeout(() => {
-                notificationDiv.style.opacity = '0';
-                notificationDiv.style.transform = 'translateY(-20px)';
-                notificationDiv.style.transition = 'all 0.5s ease';
-                notificationDiv.style.opacity = '1';
-                notificationDiv.style.transform = 'translateY(0)';
-            }, 100);
-            
-            console.log('🔔 Mostrando', items.length, 'notificação(ões) para hoje');
-        }
-        
-        function dismissNotifications() {
-            const today = new Date();
-            const todayStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
-            const dismissedKey = `dismissed_${currentUser}_${todayStr}`;
-            
-            // Mark as dismissed for today
-            localStorage.setItem(dismissedKey, 'true');
-            
-            // Hide notification with animation
-            const notificationDiv = document.getElementById('dailyNotifications');
-            notificationDiv.style.transition = 'all 0.5s ease';
-            notificationDiv.style.opacity = '0';
-            notificationDiv.style.transform = 'translateY(-20px)';
-            
-            setTimeout(() => {
-                notificationDiv.classList.add('hidden');
-                notificationDiv.style.opacity = '';
-                notificationDiv.style.transform = '';
-                notificationDiv.style.transition = '';
-            }, 500);
-            
-            console.log('✅ Notificações dispensadas para hoje');
-        }
-        
-        // Clean up old dismissed notifications (keep only last 30 days)
-        function cleanupOldDismissals() {
-            if (!currentUser) return;
-            
-            const thirtyDaysAgo = new Date();
-            thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
-            
-            for (let i = 0; i < localStorage.length; i++) {
-                const key = localStorage.key(i);
-                if (key && key.startsWith(`dismissed_${currentUser}_`)) {
-                    const dateStr = key.replace(`dismissed_${currentUser}_`, '');
-                    const dismissedDate = new Date(dateStr);
-                    if (dismissedDate < thirtyDaysAgo) {
-                        localStorage.removeItem(key);
-                        i--; // Adjust index since we removed an item
-                    }
-                }
-            }
-        }
-
-        // Initialize login system
-        (() => {
-            console.log('🚀 Inicializando sistema...');
-            
-            // Initialize Firebase Auth
-            setTimeout(() => {
-                initFirebaseAuth();
-            }, 1000);
-            
-            const hasUser = checkCurrentUser();
-            if (!hasUser) {
-                console.log('👤 Nenhum usuário logado - mostrando tela de login');
-                // Show login modal if no user is logged in
-                document.getElementById('loginModal').style.display = 'flex';
-                document.getElementById('mainContent').classList.add('blur-background');
-            } else {
-                console.log('✅ Usuário já logado:', currentUser);
-            }
-        })();
-        
-        // Add keyboard support for login forms
-        document.getElementById('loginPassword').addEventListener('keypress', function(e) {
-            if (e.key === 'Enter') {
-                attemptLogin();
-            }
-        });
-        
-        document.getElementById('confirmPassword').addEventListener('keypress', function(e) {
-            if (e.key === 'Enter') {
-                attemptRegister();
-            }
-        });
-
-        // Close modal when clicking outside
-        document.getElementById('eventModal').addEventListener('click', function(e) {
-            if (e.target === this) {
-                closeModal();
-            }
-        });
-
-        document.getElementById('notesModal').addEventListener('click', function(e) {
-            if (e.target === this) {
-                closeNotesModal();
-            }
-        });
-    </script>
-<script>(function(){function c(){var b=a.contentDocument||a.contentWindow.document;if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'96aec75de3ed79d1',t:'MTc1NDQ4NTg3Mi4wMDAwMDA='};var a=document.createElement('script');a.nonce='';a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script></body>
-</html>
