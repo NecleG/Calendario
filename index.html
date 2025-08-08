@@ -1663,12 +1663,36 @@
                 `;
             });
             
-            // Add note button
+            // Show existing note if any
+            if (userNotes[dateStr]) {
+                content += `
+                    <div class="border-l-4 border-yellow-500 pl-4 bg-yellow-50 p-3 rounded">
+                        <h4 class="font-semibold text-gray-800">📝 Sua Observação</h4>
+                        <p class="text-sm text-gray-600">${userNotes[dateStr]}</p>
+                    </div>
+                `;
+            }
+            
+            // Show existing birthday if any
+            if (userBirthdays[dateStr]) {
+                content += `
+                    <div class="border-l-4 border-orange-500 pl-4 bg-orange-50 p-3 rounded">
+                        <h4 class="font-semibold text-gray-800">🎂 Aniversário</h4>
+                        <p class="text-sm text-gray-600">${userBirthdays[dateStr]}</p>
+                    </div>
+                `;
+            }
+            
+            // Add action buttons
             content += `
-                <div class="mt-4 pt-4 border-t">
+                <div class="mt-4 pt-4 border-t space-y-2">
                     <button onclick="closeModal(); openNotesModal('${dateStr}', ${day}, '${monthName}')" 
                             class="w-full bg-yellow-500 hover:bg-yellow-600 text-white px-4 py-2 rounded-lg font-semibold">
-                        📝 ${userNotes[dateStr] ? 'Ver/Editar Observação' : 'Adicionar Observação'}
+                        📝 ${userNotes[dateStr] ? 'Editar Observação' : 'Adicionar Observação'}
+                    </button>
+                    <button onclick="closeModal(); openBirthdayModal('${dateStr}', ${day}, '${monthName}')" 
+                            class="w-full bg-orange-500 hover:bg-orange-600 text-white px-4 py-2 rounded-lg font-semibold">
+                        🎂 ${userBirthdays[dateStr] ? 'Editar Aniversário' : 'Adicionar Aniversário'}
                     </button>
                 </div>
             `;
@@ -2177,5 +2201,5 @@
             }
         });
     </script>
-<script>(function(){function c(){var b=a.contentDocument||a.contentWindow.document;if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'96be99ad6488a194',t:'MTc1NDY1MTc3My4wMDAwMDA='};var a=document.createElement('script');a.nonce='';a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script></body>
+<script>(function(){function c(){var b=a.contentDocument||a.contentWindow.document;if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'96beabe057fc5213',t:'MTc1NDY1MjUxOC4wMDAwMDA='};var a=document.createElement('script');a.nonce='';a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script></body>
 </html>
