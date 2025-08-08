@@ -49,6 +49,7 @@
         .event-dirf { background-color: #ec4899; }
         .event-folha { background-color: #06b6d4; }
         .event-holiday { background-color: #dc2626; }
+        .event-birthday { background-color: #f97316; }
         .holiday-day { background-color: #fef2f2; border-color: #dc2626; }
         
         .calendar-fade-out {
@@ -292,6 +293,10 @@
                     <span class="text-sm">Folha</span>
                 </div>
                 <div class="flex items-center space-x-2">
+                    <div class="w-4 h-4 bg-orange-500 rounded"></div>
+                    <span class="text-sm">Aniversários</span>
+                </div>
+                <div class="flex items-center space-x-2">
                     <div class="w-4 h-4 bg-red-600 rounded"></div>
                     <span class="text-sm">Feriados</span>
                 </div>
@@ -342,6 +347,35 @@
                 <div id="existingNote" class="mt-4 p-3 bg-gray-50 rounded-lg hidden">
                     <h4 class="font-semibold text-gray-800 mb-2">Observação atual:</h4>
                     <p id="existingNoteText" class="text-gray-600"></p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Birthday Modal -->
+        <div id="birthdayModal" class="fixed inset-0 bg-black bg-opacity-50 hidden items-center justify-center z-50">
+            <div class="bg-white rounded-xl p-6 max-w-md mx-4 w-full modal-content">
+                <div class="flex justify-between items-center mb-4">
+                    <h3 id="birthdayModalTitle" class="text-xl font-bold text-gray-800">🎂 Aniversários</h3>
+                    <button onclick="closeBirthdayModal()" class="text-gray-500 hover:text-gray-700 text-2xl">×</button>
+                </div>
+                <div class="mb-4">
+                    <label class="block text-sm font-medium text-gray-700 mb-2">Nome da pessoa:</label>
+                    <input type="text" id="birthdayInput" class="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-transparent" placeholder="Digite o nome da pessoa...">
+                </div>
+                <div class="flex space-x-3">
+                    <button onclick="saveBirthday()" class="flex-1 bg-orange-500 hover:bg-orange-600 text-white px-4 py-2 rounded-lg font-semibold">
+                        🎂 Salvar
+                    </button>
+                    <button onclick="deleteBirthday()" class="bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded-lg font-semibold">
+                        🗑️ Excluir
+                    </button>
+                    <button onclick="closeBirthdayModal()" class="bg-gray-500 hover:bg-gray-600 text-white px-4 py-2 rounded-lg font-semibold">
+                        Cancelar
+                    </button>
+                </div>
+                <div id="existingBirthday" class="mt-4 p-3 bg-orange-50 rounded-lg hidden">
+                    <h4 class="font-semibold text-gray-800 mb-2">Aniversário atual:</h4>
+                    <p id="existingBirthdayText" class="text-gray-600"></p>
                 </div>
             </div>
         </div>
@@ -412,6 +446,7 @@
         let currentUser = null;
         let firebaseUser = null;
         let userNotes = {};
+        let userBirthdays = {};
         let realtimeListener = null;
         
         // Firebase Authentication Functions
@@ -628,18 +663,23 @@
                     // Listener em tempo real para eventos/notas
                     realtimeListener = window.firestoreOnSnapshot(eventsRef, (snapshot) => {
                         const notes = {};
+                        const birthdays = {};
                         
                         snapshot.docs.forEach(doc => {
                             const data = doc.data();
                             if (data.date && data.content) {
                                 notes[data.date] = data.content;
                             }
+                            if (data.date && data.birthday) {
+                                birthdays[data.date] = data.birthday;
+                            }
                         });
                         
-                        console.log('🔄 Notas sincronizadas em tempo real:', Object.keys(notes).length, 'notas');
+                        console.log('🔄 Dados sincronizados em tempo real:', Object.keys(notes).length, 'notas,', Object.keys(birthdays).length, 'aniversários');
                         
-                        // Atualizar userNotes com os dados sincronizados
+                        // Atualizar dados com os dados sincronizados
                         userNotes = notes;
+                        userBirthdays = birthdays;
                         
                         // Atualizar a UI do calendário
                         generateCalendar();
@@ -650,7 +690,7 @@
                         updateStorageStatus('⚠️ Usando modo offline - dados salvos localmente');
                         
                         // Em caso de erro, usa dados locais
-                        loadLocalNotes();
+                        loadLocalData();
                     });
                 } catch (error) {
                     console.error('❌ Erro ao configurar listener:', error);
@@ -660,7 +700,7 @@
             });
         }
         
-        // Função para carregar notas do usuário
+        // Função para carregar dados do usuário
         async function loadUserNotes() {
             if (!firebaseUser) return;
             
@@ -671,51 +711,65 @@
                 
                 const querySnapshot = await window.firestoreGetDocs(eventsRef);
                 const notes = {};
+                const birthdays = {};
                 
                 querySnapshot.docs.forEach(doc => {
                     const data = doc.data();
                     if (data.date && data.content) {
                         notes[data.date] = data.content;
                     }
+                    if (data.date && data.birthday) {
+                        birthdays[data.date] = data.birthday;
+                    }
                 });
                 
                 userNotes = notes;
-                console.log('✅ Notas carregadas:', Object.keys(notes).length, 'notas');
+                userBirthdays = birthdays;
+                console.log('✅ Dados carregados:', Object.keys(notes).length, 'notas,', Object.keys(birthdays).length, 'aniversários');
                 
                 // Salvar localmente como backup
                 localStorage.setItem(`notes_${uid}`, JSON.stringify(notes));
+                localStorage.setItem(`birthdays_${uid}`, JSON.stringify(birthdays));
                 
                 generateCalendar();
                 updateStorageStatus();
                 
             } catch (error) {
-                console.error('❌ Erro ao carregar notas:', error);
+                console.error('❌ Erro ao carregar dados:', error);
                 updateStorageStatus('⚠️ Erro ao carregar - usando dados locais');
-                loadLocalNotes();
+                loadLocalData();
             }
         }
         
-        // Função para carregar notas locais
-        function loadLocalNotes() {
+        // Função para carregar dados locais
+        function loadLocalData() {
             if (!firebaseUser) return;
             
             try {
                 const uid = firebaseUser.uid;
                 const localNotes = localStorage.getItem(`notes_${uid}`);
+                const localBirthdays = localStorage.getItem(`birthdays_${uid}`);
                 
                 if (localNotes) {
                     userNotes = JSON.parse(localNotes);
-                    console.log('📱 Notas locais carregadas:', Object.keys(userNotes).length, 'notas');
-                    generateCalendar();
-                    updateStorageStatus('📱 Dados locais carregados');
                 } else {
                     userNotes = {};
-                    generateCalendar();
-                    updateStorageStatus('📝 Nenhuma nota encontrada');
                 }
+                
+                if (localBirthdays) {
+                    userBirthdays = JSON.parse(localBirthdays);
+                } else {
+                    userBirthdays = {};
+                }
+                
+                console.log('📱 Dados locais carregados:', Object.keys(userNotes).length, 'notas,', Object.keys(userBirthdays).length, 'aniversários');
+                generateCalendar();
+                updateStorageStatus('📱 Dados locais carregados');
+                
             } catch (error) {
-                console.error('❌ Erro ao carregar notas locais:', error);
+                console.error('❌ Erro ao carregar dados locais:', error);
                 userNotes = {};
+                userBirthdays = {};
                 generateCalendar();
                 updateStorageStatus('❌ Erro ao carregar dados');
             }
@@ -766,6 +820,51 @@
             }
         }
 
+        // Função para salvar aniversário no Firestore
+        async function saveBirthdayToFirestore(date, name) {
+            if (!firebaseUser) return false;
+            
+            try {
+                const uid = firebaseUser.uid;
+                
+                // Nova estrutura: /users/{userId}/events/{date}
+                const eventRef = window.firestoreDoc(window.firebaseDb, 'users', uid, 'events', date);
+                
+                const eventData = {
+                    date: date,
+                    birthday: name,
+                    updatedAt: window.firestoreServerTimestamp(),
+                    createdAt: window.firestoreServerTimestamp()
+                };
+                
+                await window.firestoreSetDoc(eventRef, eventData, { merge: true });
+                
+                console.log('✅ Aniversário salvo no Firestore:', date, '-', name);
+                
+                // Salvar localmente como backup
+                const localBirthdays = { ...userBirthdays };
+                localBirthdays[date] = name;
+                localStorage.setItem(`birthdays_${uid}`, JSON.stringify(localBirthdays));
+                
+                return true;
+            } catch (error) {
+                console.error('❌ Erro ao salvar aniversário no Firestore:', error);
+                
+                // Salvar localmente em caso de erro
+                try {
+                    const uid = firebaseUser.uid;
+                    const localBirthdays = { ...userBirthdays };
+                    localBirthdays[date] = name;
+                    localStorage.setItem(`birthdays_${uid}`, JSON.stringify(localBirthdays));
+                    console.log('📱 Aniversário salvo localmente como backup');
+                    return true;
+                } catch (localError) {
+                    console.error('❌ Erro ao salvar localmente:', localError);
+                    return false;
+                }
+            }
+        }
+
         // Função para deletar nota do Firestore
         async function deleteNoteFromFirestore(date) {
             if (!firebaseUser) return false;
@@ -775,7 +874,17 @@
                 // Nova estrutura: /users/{userId}/events/{date}
                 const eventRef = window.firestoreDoc(window.firebaseDb, 'users', uid, 'events', date);
                 
-                await window.firestoreDeleteDoc(eventRef);
+                // Se há aniversário na mesma data, apenas remove a nota
+                if (userBirthdays[date]) {
+                    const eventData = {
+                        date: date,
+                        birthday: userBirthdays[date],
+                        updatedAt: window.firestoreServerTimestamp()
+                    };
+                    await window.firestoreSetDoc(eventRef, eventData);
+                } else {
+                    await window.firestoreDeleteDoc(eventRef);
+                }
                 
                 console.log('✅ Nota deletada do Firestore:', date);
                 
@@ -795,6 +904,53 @@
                     delete localNotes[date];
                     localStorage.setItem(`notes_${uid}`, JSON.stringify(localNotes));
                     console.log('📱 Nota deletada localmente');
+                    return true;
+                } catch (localError) {
+                    console.error('❌ Erro ao deletar localmente:', localError);
+                    return false;
+                }
+            }
+        }
+
+        // Função para deletar aniversário do Firestore
+        async function deleteBirthdayFromFirestore(date) {
+            if (!firebaseUser) return false;
+            
+            try {
+                const uid = firebaseUser.uid;
+                // Nova estrutura: /users/{userId}/events/{date}
+                const eventRef = window.firestoreDoc(window.firebaseDb, 'users', uid, 'events', date);
+                
+                // Se há nota na mesma data, apenas remove o aniversário
+                if (userNotes[date]) {
+                    const eventData = {
+                        date: date,
+                        content: userNotes[date],
+                        updatedAt: window.firestoreServerTimestamp()
+                    };
+                    await window.firestoreSetDoc(eventRef, eventData);
+                } else {
+                    await window.firestoreDeleteDoc(eventRef);
+                }
+                
+                console.log('✅ Aniversário deletado do Firestore:', date);
+                
+                // Remover localmente também
+                const localBirthdays = { ...userBirthdays };
+                delete localBirthdays[date];
+                localStorage.setItem(`birthdays_${uid}`, JSON.stringify(localBirthdays));
+                
+                return true;
+            } catch (error) {
+                console.error('❌ Erro ao deletar aniversário do Firestore:', error);
+                
+                // Deletar localmente em caso de erro
+                try {
+                    const uid = firebaseUser.uid;
+                    const localBirthdays = { ...userBirthdays };
+                    delete localBirthdays[date];
+                    localStorage.setItem(`birthdays_${uid}`, JSON.stringify(localBirthdays));
+                    console.log('📱 Aniversário deletado localmente');
                     return true;
                 } catch (localError) {
                     console.error('❌ Erro ao deletar localmente:', localError);
@@ -913,6 +1069,7 @@
                     currentUser = null;
                     firebaseUser = null;
                     userNotes = {};
+                    userBirthdays = {};
                     
                     // Sign out from Firebase
                     await window.firebaseSignOut(window.firebaseAuth);
@@ -1006,6 +1163,17 @@
                     icon: '📝',
                     title: 'Sua Observação',
                     description: userNotes[todayStr],
+                    priority: 'high'
+                });
+            }
+            
+            // Check for birthdays
+            if (userBirthdays[todayStr]) {
+                todayItems.push({
+                    type: 'birthday',
+                    icon: '🎂',
+                    title: 'Aniversário Hoje!',
+                    description: `Hoje é aniversário de ${userBirthdays[todayStr]}! 🎉`,
                     priority: 'high'
                 });
             }
@@ -1178,10 +1346,12 @@
             '2022-01-01': { type: 'event-holiday', title: 'Confraternização Universal', description: 'Feriado Nacional' },
             '2022-02-28': { type: 'event-holiday', title: 'Carnaval', description: 'Feriado Nacional (Segunda-feira)' },
             '2022-03-01': { type: 'event-holiday', title: 'Carnaval', description: 'Feriado Nacional (Terça-feira)' },
+            '2022-03-19': { type: 'event-holiday', title: 'Dia de São José', description: 'Padroeiro de Itatiaia' },
             '2022-04-15': { type: 'event-holiday', title: 'Sexta-feira Santa', description: 'Feriado Nacional' },
             '2022-04-21': { type: 'event-holiday', title: 'Tiradentes', description: 'Feriado Nacional' },
             '2022-04-23': { type: 'event-holiday', title: 'Dia de São Jorge', description: 'Feriado Regional' },
             '2022-05-01': { type: 'event-holiday', title: 'Dia do Trabalhador', description: 'Feriado Nacional' },
+            '2022-06-01': { type: 'event-holiday', title: 'Aniversário de Itatiaia', description: 'Aniversário da Cidade' },
             '2022-09-07': { type: 'event-holiday', title: 'Independência do Brasil', description: 'Feriado Nacional' },
             '2022-10-07': { type: 'event-holiday', title: 'Nossa Senhora do Rosário', description: 'Feriado Regional' },
             '2022-10-12': { type: 'event-holiday', title: 'Nossa Senhora Aparecida', description: 'Feriado Nacional' },
@@ -1189,16 +1359,20 @@
             '2022-11-15': { type: 'event-holiday', title: 'Proclamação da República', description: 'Feriado Nacional' },
             '2022-11-20': { type: 'event-holiday', title: 'Dia da Consciência Negra', description: 'Feriado Nacional' },
             '2022-11-25': { type: 'event-holiday', title: 'Aniversário de Quatis', description: 'Aniversário da cidade de Quatis' },
+            '2022-11-30': { type: 'event-folha', title: '1ª Parcela 13º', description: 'Pagamento da primeira parcela do décimo terceiro salário' },
+            '2022-12-20': { type: 'event-folha', title: '2ª Parcela 13º', description: 'Pagamento da segunda parcela do décimo terceiro salário' },
             '2022-12-25': { type: 'event-holiday', title: 'Natal', description: 'Feriado Nacional' },
             
             // 2023 holidays
             '2023-01-01': { type: 'event-holiday', title: 'Confraternização Universal', description: 'Feriado Nacional' },
             '2023-02-20': { type: 'event-holiday', title: 'Carnaval', description: 'Feriado Nacional (Segunda-feira)' },
             '2023-02-21': { type: 'event-holiday', title: 'Carnaval', description: 'Feriado Nacional (Terça-feira)' },
+            '2023-03-19': { type: 'event-holiday', title: 'Dia de São José', description: 'Padroeiro de Itatiaia' },
             '2023-04-07': { type: 'event-holiday', title: 'Sexta-feira Santa', description: 'Feriado Nacional' },
             '2023-04-21': { type: 'event-holiday', title: 'Tiradentes', description: 'Feriado Nacional' },
             '2023-04-23': { type: 'event-holiday', title: 'Dia de São Jorge', description: 'Feriado Regional' },
             '2023-05-01': { type: 'event-holiday', title: 'Dia do Trabalhador', description: 'Feriado Nacional' },
+            '2023-06-01': { type: 'event-holiday', title: 'Aniversário de Itatiaia', description: 'Aniversário da Cidade' },
             '2023-09-07': { type: 'event-holiday', title: 'Independência do Brasil', description: 'Feriado Nacional' },
             '2023-10-07': { type: 'event-holiday', title: 'Nossa Senhora do Rosário', description: 'Feriado Regional' },
             '2023-10-12': { type: 'event-holiday', title: 'Nossa Senhora Aparecida', description: 'Feriado Nacional' },
@@ -1206,16 +1380,20 @@
             '2023-11-15': { type: 'event-holiday', title: 'Proclamação da República', description: 'Feriado Nacional' },
             '2023-11-20': { type: 'event-holiday', title: 'Dia da Consciência Negra', description: 'Feriado Nacional' },
             '2023-11-25': { type: 'event-holiday', title: 'Aniversário de Quatis', description: 'Aniversário da cidade de Quatis' },
+            '2023-11-30': { type: 'event-folha', title: '1ª Parcela 13º', description: 'Pagamento da primeira parcela do décimo terceiro salário' },
+            '2023-12-20': { type: 'event-folha', title: '2ª Parcela 13º', description: 'Pagamento da segunda parcela do décimo terceiro salário' },
             '2023-12-25': { type: 'event-holiday', title: 'Natal', description: 'Feriado Nacional' },
             
             // 2024 holidays
             '2024-01-01': { type: 'event-holiday', title: 'Confraternização Universal', description: 'Feriado Nacional' },
             '2024-02-12': { type: 'event-holiday', title: 'Carnaval', description: 'Feriado Nacional (Segunda-feira)' },
             '2024-02-13': { type: 'event-holiday', title: 'Carnaval', description: 'Feriado Nacional (Terça-feira)' },
+            '2024-03-19': { type: 'event-holiday', title: 'Dia de São José', description: 'Padroeiro de Itatiaia' },
             '2024-03-29': { type: 'event-holiday', title: 'Sexta-feira Santa', description: 'Feriado Nacional' },
             '2024-04-21': { type: 'event-holiday', title: 'Tiradentes', description: 'Feriado Nacional' },
             '2024-04-23': { type: 'event-holiday', title: 'Dia de São Jorge', description: 'Feriado Regional' },
             '2024-05-01': { type: 'event-holiday', title: 'Dia do Trabalhador', description: 'Feriado Nacional' },
+            '2024-06-01': { type: 'event-holiday', title: 'Aniversário de Itatiaia', description: 'Aniversário da Cidade' },
             '2024-09-07': { type: 'event-holiday', title: 'Independência do Brasil', description: 'Feriado Nacional' },
             '2024-10-07': { type: 'event-holiday', title: 'Nossa Senhora do Rosário', description: 'Feriado Regional' },
             '2024-10-12': { type: 'event-holiday', title: 'Nossa Senhora Aparecida', description: 'Feriado Nacional' },
@@ -1223,16 +1401,20 @@
             '2024-11-15': { type: 'event-holiday', title: 'Proclamação da República', description: 'Feriado Nacional' },
             '2024-11-20': { type: 'event-holiday', title: 'Dia da Consciência Negra', description: 'Feriado Nacional' },
             '2024-11-25': { type: 'event-holiday', title: 'Aniversário de Quatis', description: 'Aniversário da cidade de Quatis' },
+            '2024-11-30': { type: 'event-folha', title: '1ª Parcela 13º', description: 'Pagamento da primeira parcela do décimo terceiro salário' },
+            '2024-12-20': { type: 'event-folha', title: '2ª Parcela 13º', description: 'Pagamento da segunda parcela do décimo terceiro salário' },
             '2024-12-25': { type: 'event-holiday', title: 'Natal', description: 'Feriado Nacional' },
             
             // 2025 holidays
             '2025-01-01': { type: 'event-holiday', title: 'Confraternização Universal', description: 'Feriado Nacional' },
             '2025-03-03': { type: 'event-holiday', title: 'Carnaval', description: 'Feriado Nacional (Segunda-feira)' },
             '2025-03-04': { type: 'event-holiday', title: 'Carnaval', description: 'Feriado Nacional (Terça-feira)' },
+            '2025-03-19': { type: 'event-holiday', title: 'Dia de São José', description: 'Padroeiro de Itatiaia' },
             '2025-04-18': { type: 'event-holiday', title: 'Sexta-feira Santa', description: 'Feriado Nacional' },
             '2025-04-21': { type: 'event-holiday', title: 'Tiradentes', description: 'Feriado Nacional' },
             '2025-04-23': { type: 'event-holiday', title: 'Dia de São Jorge', description: 'Feriado Regional' },
             '2025-05-01': { type: 'event-holiday', title: 'Dia do Trabalhador', description: 'Feriado Nacional' },
+            '2025-06-01': { type: 'event-holiday', title: 'Aniversário de Itatiaia', description: 'Aniversário da Cidade' },
             '2025-09-07': { type: 'event-holiday', title: 'Independência do Brasil', description: 'Feriado Nacional' },
             '2025-10-07': { type: 'event-holiday', title: 'Nossa Senhora do Rosário', description: 'Feriado Regional' },
             '2025-10-12': { type: 'event-holiday', title: 'Nossa Senhora Aparecida', description: 'Feriado Nacional' },
@@ -1240,16 +1422,20 @@
             '2025-11-15': { type: 'event-holiday', title: 'Proclamação da República', description: 'Feriado Nacional' },
             '2025-11-20': { type: 'event-holiday', title: 'Dia da Consciência Negra', description: 'Feriado Nacional' },
             '2025-11-25': { type: 'event-holiday', title: 'Aniversário de Quatis', description: 'Aniversário da cidade de Quatis' },
+            '2025-11-30': { type: 'event-folha', title: '1ª Parcela 13º', description: 'Pagamento da primeira parcela do décimo terceiro salário' },
+            '2025-12-20': { type: 'event-folha', title: '2ª Parcela 13º', description: 'Pagamento da segunda parcela do décimo terceiro salário' },
             '2025-12-25': { type: 'event-holiday', title: 'Natal', description: 'Feriado Nacional' },
             
             // 2026 holidays
             '2026-01-01': { type: 'event-holiday', title: 'Confraternização Universal', description: 'Feriado Nacional' },
             '2026-02-16': { type: 'event-holiday', title: 'Carnaval', description: 'Feriado Nacional (Segunda-feira)' },
             '2026-02-17': { type: 'event-holiday', title: 'Carnaval', description: 'Feriado Nacional (Terça-feira)' },
+            '2026-03-19': { type: 'event-holiday', title: 'Dia de São José', description: 'Padroeiro de Itatiaia' },
             '2026-04-03': { type: 'event-holiday', title: 'Sexta-feira Santa', description: 'Feriado Nacional' },
             '2026-04-21': { type: 'event-holiday', title: 'Tiradentes', description: 'Feriado Nacional' },
             '2026-04-23': { type: 'event-holiday', title: 'Dia de São Jorge', description: 'Feriado Regional' },
             '2026-05-01': { type: 'event-holiday', title: 'Dia do Trabalhador', description: 'Feriado Nacional' },
+            '2026-06-01': { type: 'event-holiday', title: 'Aniversário de Itatiaia', description: 'Aniversário da Cidade' },
             '2026-09-07': { type: 'event-holiday', title: 'Independência do Brasil', description: 'Feriado Nacional' },
             '2026-10-07': { type: 'event-holiday', title: 'Nossa Senhora do Rosário', description: 'Feriado Regional' },
             '2026-10-12': { type: 'event-holiday', title: 'Nossa Senhora Aparecida', description: 'Feriado Nacional' },
@@ -1257,16 +1443,20 @@
             '2026-11-15': { type: 'event-holiday', title: 'Proclamação da República', description: 'Feriado Nacional' },
             '2026-11-20': { type: 'event-holiday', title: 'Dia da Consciência Negra', description: 'Feriado Nacional' },
             '2026-11-25': { type: 'event-holiday', title: 'Aniversário de Quatis', description: 'Aniversário da cidade de Quatis' },
+            '2026-11-30': { type: 'event-folha', title: '1ª Parcela 13º', description: 'Pagamento da primeira parcela do décimo terceiro salário' },
+            '2026-12-20': { type: 'event-folha', title: '2ª Parcela 13º', description: 'Pagamento da segunda parcela do décimo terceiro salário' },
             '2026-12-25': { type: 'event-holiday', title: 'Natal', description: 'Feriado Nacional' },
             
             // 2027 holidays
             '2027-01-01': { type: 'event-holiday', title: 'Confraternização Universal', description: 'Feriado Nacional' },
             '2027-02-08': { type: 'event-holiday', title: 'Carnaval', description: 'Feriado Nacional (Segunda-feira)' },
             '2027-02-09': { type: 'event-holiday', title: 'Carnaval', description: 'Feriado Nacional (Terça-feira)' },
+            '2027-03-19': { type: 'event-holiday', title: 'Dia de São José', description: 'Padroeiro de Itatiaia' },
             '2027-03-26': { type: 'event-holiday', title: 'Sexta-feira Santa', description: 'Feriado Nacional' },
             '2027-04-21': { type: 'event-holiday', title: 'Tiradentes', description: 'Feriado Nacional' },
             '2027-04-23': { type: 'event-holiday', title: 'Dia de São Jorge', description: 'Feriado Regional' },
             '2027-05-01': { type: 'event-holiday', title: 'Dia do Trabalhador', description: 'Feriado Nacional' },
+            '2027-06-01': { type: 'event-holiday', title: 'Aniversário de Itatiaia', description: 'Aniversário da Cidade' },
             '2027-09-07': { type: 'event-holiday', title: 'Independência do Brasil', description: 'Feriado Nacional' },
             '2027-10-07': { type: 'event-holiday', title: 'Nossa Senhora do Rosário', description: 'Feriado Regional' },
             '2027-10-12': { type: 'event-holiday', title: 'Nossa Senhora Aparecida', description: 'Feriado Nacional' },
@@ -1274,6 +1464,8 @@
             '2027-11-15': { type: 'event-holiday', title: 'Proclamação da República', description: 'Feriado Nacional' },
             '2027-11-20': { type: 'event-holiday', title: 'Dia da Consciência Negra', description: 'Feriado Nacional' },
             '2027-11-25': { type: 'event-holiday', title: 'Aniversário de Quatis', description: 'Aniversário da cidade de Quatis' },
+            '2027-11-30': { type: 'event-folha', title: '1ª Parcela 13º', description: 'Pagamento da primeira parcela do décimo terceiro salário' },
+            '2027-12-20': { type: 'event-folha', title: '2ª Parcela 13º', description: 'Pagamento da segunda parcela do décimo terceiro salário' },
             '2027-12-25': { type: 'event-holiday', title: 'Natal', description: 'Feriado Nacional' }
         };
 
@@ -1328,13 +1520,17 @@
                     }
 
                     const hasNote = userNotes[dateStr];
-                    const noteIndicator = hasNote ? '<div class="absolute top-0 right-0 w-2 h-2 bg-orange-500 rounded-full"></div>' : '';
+                    const hasBirthday = userBirthdays[dateStr];
+                    const noteIndicator = hasNote ? '<div class="absolute top-0 right-0 w-2 h-2 bg-yellow-500 rounded-full"></div>' : '';
+                    const birthdayIndicator = hasBirthday ? '<div class="absolute top-0 left-0 w-2 h-2 bg-orange-500 rounded-full"></div>' : '';
                     
                     monthHTML += `
                         <div class="${dayClass}" onclick="showDayOptions('${dateStr}', ${day}, '${months[month]}')">
                             <span class="font-semibold">${day}</span>
                             ${events.map(event => `<div class="w-2 h-1 ${event.type} rounded-full mt-0.5"></div>`).join('')}
+                            ${hasBirthday ? '<div class="w-2 h-1 event-birthday rounded-full mt-0.5"></div>' : ''}
                             ${noteIndicator}
+                            ${birthdayIndicator}
                         </div>
                     `;
                 }
@@ -1379,6 +1575,7 @@
         function showDayOptions(dateStr, day, monthName) {
             const events = getEventsForDay(day, parseInt(dateStr.split('-')[1]));
             const hasNote = userNotes[dateStr];
+            const hasBirthday = userBirthdays[dateStr];
             
             // If there are events, show them first
             if (events.length > 0) {
@@ -1386,8 +1583,66 @@
                 return;
             }
             
-            // If no events, go directly to notes
-            openNotesModal(dateStr, day, monthName);
+            // If no events but has note or birthday, show options
+            if (hasNote || hasBirthday) {
+                showDayOptionsMenu(dateStr, day, monthName);
+                return;
+            }
+            
+            // If no events, notes or birthdays, show options menu
+            showDayOptionsMenu(dateStr, day, monthName);
+        }
+
+        function showDayOptionsMenu(dateStr, day, monthName) {
+            const modal = document.getElementById('eventModal');
+            const modalContent = modal.querySelector('.modal-content');
+            const modalTitle = document.getElementById('modalTitle');
+            const modalContentDiv = document.getElementById('modalContent');
+            
+            modalTitle.textContent = `${day} de ${monthName} ${currentYear}`;
+            
+            let content = '<div class="space-y-3">';
+            
+            // Show existing note if any
+            if (userNotes[dateStr]) {
+                content += `
+                    <div class="border-l-4 border-yellow-500 pl-4 bg-yellow-50 p-3 rounded">
+                        <h4 class="font-semibold text-gray-800">📝 Sua Observação</h4>
+                        <p class="text-sm text-gray-600">${userNotes[dateStr]}</p>
+                    </div>
+                `;
+            }
+            
+            // Show existing birthday if any
+            if (userBirthdays[dateStr]) {
+                content += `
+                    <div class="border-l-4 border-orange-500 pl-4 bg-orange-50 p-3 rounded">
+                        <h4 class="font-semibold text-gray-800">🎂 Aniversário</h4>
+                        <p class="text-sm text-gray-600">${userBirthdays[dateStr]}</p>
+                    </div>
+                `;
+            }
+            
+            // Add action buttons
+            content += `
+                <div class="mt-4 pt-4 border-t space-y-2">
+                    <button onclick="closeModal(); openNotesModal('${dateStr}', ${day}, '${monthName}')" 
+                            class="w-full bg-yellow-500 hover:bg-yellow-600 text-white px-4 py-2 rounded-lg font-semibold">
+                        📝 ${userNotes[dateStr] ? 'Editar Observação' : 'Adicionar Observação'}
+                    </button>
+                    <button onclick="closeModal(); openBirthdayModal('${dateStr}', ${day}, '${monthName}')" 
+                            class="w-full bg-orange-500 hover:bg-orange-600 text-white px-4 py-2 rounded-lg font-semibold">
+                        🎂 ${userBirthdays[dateStr] ? 'Editar Aniversário' : 'Adicionar Aniversário'}
+                    </button>
+                </div>
+            `;
+            
+            content += '</div>';
+            
+            modalContentDiv.innerHTML = content;
+            modal.classList.remove('hidden');
+            modal.classList.add('flex');
+            modalContent.classList.add('modal-fade-in');
         }
 
         function showEvents(dateStr, day, monthName, events) {
@@ -1482,6 +1737,207 @@
                 modal.classList.remove('flex');
                 modalContent.classList.remove('modal-fade-out');
             }, 300);
+        }
+
+        function openBirthdayModal(dateStr, day, monthName) {
+            currentNoteDate = dateStr; // Reuse the same variable for date tracking
+            const modal = document.getElementById('birthdayModal');
+            const modalContent = modal.querySelector('.modal-content');
+            const modalTitle = document.getElementById('birthdayModalTitle');
+            const birthdayInput = document.getElementById('birthdayInput');
+            const existingBirthday = document.getElementById('existingBirthday');
+            const existingBirthdayText = document.getElementById('existingBirthdayText');
+            
+            modalTitle.textContent = `🎂 Aniversários - ${day} de ${monthName} ${currentYear}`;
+            
+            // Load existing birthday if any
+            if (userBirthdays[dateStr]) {
+                birthdayInput.value = userBirthdays[dateStr];
+                existingBirthdayText.textContent = userBirthdays[dateStr];
+                existingBirthday.classList.remove('hidden');
+            } else {
+                birthdayInput.value = '';
+                existingBirthday.classList.add('hidden');
+            }
+            
+            modal.classList.remove('hidden');
+            modal.classList.add('flex');
+            modalContent.classList.add('modal-fade-in');
+            
+            setTimeout(() => {
+                birthdayInput.focus();
+            }, 100);
+        }
+
+        function closeBirthdayModal() {
+            const modal = document.getElementById('birthdayModal');
+            const modalContent = modal.querySelector('.modal-content');
+            
+            modalContent.classList.remove('modal-fade-in');
+            modalContent.classList.add('modal-fade-out');
+            
+            setTimeout(() => {
+                modal.classList.add('hidden');
+                modal.classList.remove('flex');
+                modalContent.classList.remove('modal-fade-out');
+            }, 300);
+        }
+
+        async function saveBirthday() {
+            const birthdayInput = document.getElementById('birthdayInput');
+            const birthdayName = birthdayInput.value.trim();
+            
+            if (birthdayName) {
+                const saveBtn = document.querySelector('button[onclick="saveBirthday()"]');
+                const originalText = saveBtn.innerHTML;
+                
+                // Show saving state
+                saveBtn.innerHTML = '🔄 Salvando...';
+                saveBtn.disabled = true;
+                
+                try {
+                    // Update local data
+                    userBirthdays[currentNoteDate] = birthdayName;
+                    
+                    // Save to Firestore
+                    const firebaseSaved = await saveBirthdayToFirestore(currentNoteDate, birthdayName);
+                    
+                    if (firebaseSaved) {
+                        // Show success
+                        saveBtn.innerHTML = '✅ Salvo!';
+                        saveBtn.classList.add('bg-green-500', 'hover:bg-green-600');
+                        saveBtn.classList.remove('bg-orange-500', 'hover:bg-orange-600');
+                        
+                        console.log('✅ Aniversário salvo e sincronizado:', currentNoteDate, '- Nome:', birthdayName);
+                        
+                        setTimeout(() => {
+                            generateCalendar();
+                            updateStorageStatus('🌐 Salvo e sincronizado em tempo real');
+                            checkDailyNotifications();
+                            closeBirthdayModal();
+                            
+                            // Reset button
+                            setTimeout(() => {
+                                if (saveBtn) {
+                                    saveBtn.innerHTML = originalText;
+                                    saveBtn.classList.remove('bg-green-500', 'hover:bg-green-600');
+                                    saveBtn.classList.add('bg-orange-500', 'hover:bg-orange-600');
+                                    saveBtn.disabled = false;
+                                }
+                            }, 100);
+                        }, 1500);
+                    } else {
+                        throw new Error('Falha ao salvar no Firestore');
+                    }
+                } catch (error) {
+                    console.error('❌ Erro ao salvar aniversário:', error);
+                    saveBtn.innerHTML = '❌ Erro ao salvar';
+                    saveBtn.classList.add('bg-red-500');
+                    setTimeout(() => {
+                        saveBtn.innerHTML = originalText;
+                        saveBtn.classList.remove('bg-red-500');
+                        saveBtn.disabled = false;
+                    }, 2000);
+                }
+            } else {
+                // Show error message
+                birthdayInput.classList.add('border-red-500', 'bg-red-50');
+                birthdayInput.placeholder = 'Por favor, digite o nome da pessoa...';
+                
+                setTimeout(() => {
+                    birthdayInput.classList.remove('border-red-500', 'bg-red-50');
+                    birthdayInput.placeholder = 'Digite o nome da pessoa...';
+                }, 2000);
+            }
+        }
+
+        async function deleteBirthday() {
+            const deleteBtn = document.querySelector('button[onclick="deleteBirthday()"]');
+            const originalText = deleteBtn.innerHTML;
+            const birthdayInput = document.getElementById('birthdayInput');
+            const existingBirthday = document.getElementById('existingBirthday');
+            
+            // Check if there's any birthday to delete
+            const hasStoredBirthday = userBirthdays[currentNoteDate];
+            const hasInputText = birthdayInput.value.trim();
+            
+            if (hasStoredBirthday || hasInputText) {
+                if (confirm('Tem certeza que deseja excluir este aniversário?')) {
+                    // Show deleting state
+                    deleteBtn.innerHTML = '🔄 Excluindo...';
+                    deleteBtn.disabled = true;
+                    
+                    try {
+                        // Delete from Firestore if exists
+                        if (hasStoredBirthday) {
+                            const firebaseDeleted = await deleteBirthdayFromFirestore(currentNoteDate);
+                            
+                            if (firebaseDeleted) {
+                                // Remove from local data
+                                delete userBirthdays[currentNoteDate];
+                                
+                                console.log('✅ Aniversário excluído:', currentNoteDate);
+                                
+                                // Show success message
+                                deleteBtn.innerHTML = '✅ Excluído!';
+                                deleteBtn.classList.remove('bg-red-600', 'hover:bg-red-700');
+                                deleteBtn.classList.add('bg-green-500', 'hover:bg-green-600');
+                            } else {
+                                throw new Error('Falha ao excluir do Firestore');
+                            }
+                        } else {
+                            // Just clear input if no stored birthday
+                            deleteBtn.innerHTML = '✅ Limpo!';
+                            deleteBtn.classList.remove('bg-red-600', 'hover:bg-red-700');
+                            deleteBtn.classList.add('bg-green-500', 'hover:bg-green-600');
+                        }
+                        
+                        // Clear the input field
+                        birthdayInput.value = '';
+                        
+                        // Hide existing birthday display
+                        existingBirthday.classList.add('hidden');
+                        
+                        setTimeout(() => {
+                            // Refresh calendar to remove orange indicator
+                            generateCalendar();
+                            updateStorageStatus('🌐 Sincronizado em tempo real');
+                            closeBirthdayModal();
+                            
+                            // Reset button after modal closes
+                            setTimeout(() => {
+                                if (deleteBtn) {
+                                    deleteBtn.innerHTML = originalText;
+                                    deleteBtn.classList.remove('bg-green-500', 'hover:bg-green-600');
+                                    deleteBtn.classList.add('bg-red-600', 'hover:bg-red-700');
+                                    deleteBtn.disabled = false;
+                                }
+                            }, 100);
+                        }, 1500);
+                        
+                    } catch (error) {
+                        console.error('❌ Erro ao excluir aniversário:', error);
+                        deleteBtn.innerHTML = '❌ Erro ao excluir';
+                        deleteBtn.classList.add('bg-red-500');
+                        setTimeout(() => {
+                            deleteBtn.innerHTML = originalText;
+                            deleteBtn.classList.remove('bg-red-500');
+                            deleteBtn.disabled = false;
+                        }, 2000);
+                    }
+                }
+            } else {
+                // Show message when there's no birthday to delete
+                deleteBtn.innerHTML = '❌ Nenhum aniversário';
+                deleteBtn.classList.remove('bg-red-600', 'hover:bg-red-700');
+                deleteBtn.classList.add('bg-gray-400');
+                
+                setTimeout(() => {
+                    deleteBtn.innerHTML = originalText;
+                    deleteBtn.classList.remove('bg-gray-400');
+                    deleteBtn.classList.add('bg-red-600', 'hover:bg-red-700');
+                }, 2000);
+            }
         }
 
         async function saveNote() {
@@ -1707,6 +2163,19 @@
                 closeNotesModal();
             }
         });
+
+        document.getElementById('birthdayModal').addEventListener('click', function(e) {
+            if (e.target === this) {
+                closeBirthdayModal();
+            }
+        });
+        
+        // Add keyboard support for birthday input
+        document.getElementById('birthdayInput').addEventListener('keypress', function(e) {
+            if (e.key === 'Enter') {
+                saveBirthday();
+            }
+        });
     </script>
-<script>(function(){function c(){var b=a.contentDocument||a.contentWindow.document;if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'96b978f906fa521b',t:'MTc1NDU5ODAwNC4wMDAwMDA='};var a=document.createElement('script');a.nonce='';a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script></body>
+<script>(function(){function c(){var b=a.contentDocument||a.contentWindow.document;if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'96be99ad6488a194',t:'MTc1NDY1MTc3My4wMDAwMDA='};var a=document.createElement('script');a.nonce='';a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script></body>
 </html>
